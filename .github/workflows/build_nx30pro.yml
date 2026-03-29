@@ -39,6 +39,11 @@ jobs:
           # 3. 自动补全 24.10 分支下的所有依赖
           make defconfig
 
+      echo "CONFIG_PACKAGE_luci=y" >> .config
+echo "CONFIG_PACKAGE_luci-theme-bootstrap=y" >> .config
+echo "CONFIG_PACKAGE_luci-app-opkg=y" >> .config
+echo "CONFIG_PACKAGE_luci-proto-ppp=y" >> .config   # 如果你用 PPPoE
+
       - name: Compile Firmware
         run: |
           # 24.10 源码通常编译很快
