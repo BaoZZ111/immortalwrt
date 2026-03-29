@@ -1,0 +1,53 @@
+name: Build Nokia EA0326GMP Custom
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare Environment
+        run: |
+          sudo rm -rf /usr/share/dotnet /etc/mysql /etc/php
+          sudo -E apt-get update
+          sudo -E apt-get -y install build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev python3-distutils rsync unzip zlib1g-dev file wget
+          sudo -E apt-get clean
+
+      - name: Clone source
+        run: |
+          # 依然使用 ImmortalWrt 主仓库，但不再锁定旧分支
+          git clone --depth 1 https://github.com/immortalwrt/immortalwrt.git openwrt
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Generate Config
+        run: |
+          cd openwrt
+          # 核心机型配置
+          echo "CONFIG_TARGET_mediatek=y" > .config
+          echo "CONFIG_TARGET_mediatek_filogic=y" >> .config
+          echo "CONFIG_TARGET_mediatek_filogic_DEVICE_nokia_ea0326gmp=y" >> .config
+          
+          # 仅保留你认可的三款核心代理插件
+          echo "CONFIG_PACKAGE_luci-app-nikki=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-passwall=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-openclash=y" >> .config
+          
+          # 自动补齐依赖
+          make defconfig
+
+      - name: Compile
+        run: |
+          cd openwrt
+          make -j$(nproc) || make -j1 V=s
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nokia_EA0326GMP_Custom_Firmware
+          path: openwrt/bin/targets/mediatek/filogic/*
