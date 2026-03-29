@@ -40,11 +40,9 @@ jobs:
           
           # 自动补齐依赖
           make defconfig
+      - echo 'CONFIG_PACKAGE_luci=y' >> .config
+echo 'CONFIG_PACKAGE_luci-i18n-base-zh-cn=y' >> .config
 
-    echo "CONFIG_PACKAGE_luci=y" >> .config
-echo "CONFIG_PACKAGE_luci-theme-bootstrap=y" >> .config
-echo "CONFIG_PACKAGE_luci-app-opkg=y" >> .config
-echo "CONFIG_PACKAGE_luci-proto-ppp=y" >> .config   # 如果你用 PPPoE
 
       - name: Compile
         run: |
