@@ -1,4 +1,4 @@
-name: Build H3C NX30Pro Custom
+name: Build H3C NX30Pro Stable 24.10
 
 on:
   workflow_dispatch:
@@ -9,6 +9,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # 关键点：强制切换到官方 24.10 分支
+          ref: openwrt-24.10
 
       - name: Prepare Environment
         run: |
@@ -24,24 +27,25 @@ jobs:
 
       - name: Generate Config
         run: |
-          # 核心机型配置：华三 NX30Pro
+          # 1. 核心机型配置：华三 NX30Pro
           echo "CONFIG_TARGET_mediatek=y" > .config
           echo "CONFIG_TARGET_mediatek_filogic=y" >> .config
           echo "CONFIG_TARGET_mediatek_filogic_DEVICE_h3c_magic-nx30-pro=y" >> .config
           
-          # 仅保留你要求的两款精简插件
+          # 2. 仅保留你要求的两款核心代理插件 (精简高效)
           echo "CONFIG_PACKAGE_luci-app-nikki=y" >> .config
           echo "CONFIG_PACKAGE_luci-app-passwall=y" >> .config
           
-          # 自动补全依赖
+          # 3. 自动补全 24.10 分支下的所有依赖
           make defconfig
 
       - name: Compile Firmware
         run: |
+          # 24.10 源码通常编译很快
           make -j$(nproc) || make -j1 V=s
 
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: H3C_NX30Pro_Firmware
+          name: H3C_NX30Pro_24.10_Firmware
           path: bin/targets/mediatek/filogic/*
