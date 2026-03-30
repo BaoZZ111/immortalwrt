@@ -1,4 +1,4 @@
-name: Build ImmortalWrt (Passwall PPP Optimized)
+name: Build-Nokia
 
 on:
 workflow_dispatch:
@@ -9,103 +9,61 @@ runs-on: ubuntu-22.04
 
 ```
 steps:
-- name: Checkout
-  uses: actions/checkout@v4
+  - name: Checkout
+    uses: actions/checkout@v4
 
-- name: Install dependencies
-  run: |
-    sudo apt update
-    sudo apt install -y build-essential clang flex bison g++ gawk \
-    gcc-multilib g++-multilib gettext git libncurses5-dev libssl-dev \
-    python3-distutils rsync unzip zlib1g-dev file wget curl
+  - name: Install deps
+    run: sudo apt update && sudo apt install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git libncurses5-dev libssl-dev python3-distutils rsync unzip zlib1g-dev file wget curl
 
-- name: Clone ImmortalWrt
-  run: |
-    git clone https://github.com/immortalwrt/immortalwrt.git
-    cd immortalwrt
-    git checkout openwrt-23.05
+  - name: Clone source
+    run: |
+      git clone https://github.com/immortalwrt/immortalwrt.git
+      cd immortalwrt
+      git checkout openwrt-23.05
 
-- name: Add Passwall
-  run: |
-    cd immortalwrt
-    echo "src-git passwall https://github.com/xiaorouji/openwrt-passwall" >> feeds.conf.default
-    ./scripts/feeds update -a
-    ./scripts/feeds install -a
+  - name: Add Passwall
+    run: |
+      cd immortalwrt
+      echo "src-git passwall https://github.com/xiaorouji/openwrt-passwall" >> feeds.conf.default
+      ./scripts/feeds update -a
+      ./scripts/feeds install -a
 
-- name: Load optimized config
-  run: |
-    cd immortalwrt
-    cat <<EOF > .config
-```
+  - name: Generate config
+    run: |
+      cd immortalwrt
+      rm -f .config
+      echo "CONFIG_TARGET_mediatek=y" >> .config
+      echo "CONFIG_TARGET_mediatek_filogic=y" >> .config
+      echo "CONFIG_TARGET_mediatek_filogic_DEVICE_nokia_ea0326gmp=y" >> .config
 
-CONFIG_TARGET_mediatek=y
-CONFIG_TARGET_mediatek_filogic=y
-CONFIG_TARGET_mediatek_filogic_DEVICE_nokia_ea0326gmp=y
+      echo "CONFIG_PACKAGE_luci=y" >> .config
+      echo "CONFIG_PACKAGE_luci-ssl=y" >> .config
+      echo "CONFIG_PACKAGE_luci-app-passwall=y" >> .config
 
-# LuCI
+      echo "CONFIG_PACKAGE_kmod-tun=y" >> .config
+      echo "CONFIG_PACKAGE_kmod-inet-diag=y" >> .config
 
-CONFIG_PACKAGE_luci=y
-CONFIG_PACKAGE_luci-ssl=y
+      echo "CONFIG_PACKAGE_ppp=y" >> .config
+      echo "CONFIG_PACKAGE_ppp-mod-pppoe=y" >> .config
+      echo "CONFIG_PACKAGE_kmod-pppoe=y" >> .config
 
-# Passwall
+      echo "CONFIG_PACKAGE_dnsmasq-full=y" >> .config
 
-CONFIG_PACKAGE_luci-app-passwall=y
+      make defconfig
 
-# 必要内核
+  - name: Download
+    run: |
+      cd immortalwrt
+      make download -j$(nproc)
 
-CONFIG_PACKAGE_kmod-tun=y
-CONFIG_PACKAGE_kmod-inet-diag=y
+  - name: Compile
+    run: |
+      cd immortalwrt
+      make -j$(nproc) || make -j1 V=s
 
-# PPP 拨号（必须保留）
-
-CONFIG_PACKAGE_ppp=y
-CONFIG_PACKAGE_ppp-mod-pppoe=y
-CONFIG_PACKAGE_kmod-pppoe=y
-
-# DNS（增强版）
-
-CONFIG_PACKAGE_dnsmasq-full=y
-
-# CONFIG_PACKAGE_dnsmasq is not set
-
-# 关闭 IPv6（省内存）
-
-# CONFIG_PACKAGE_ipv6helper is not set
-
-# 移除不需要代理
-
-# CONFIG_PACKAGE_luci-app-openclash is not set
-
-# CONFIG_PACKAGE_luci-app-nikki is not set
-
-# CONFIG_PACKAGE_luci-app-homeproxy is not set
-
-# 精简组件
-
-# CONFIG_PACKAGE_luci-app-samba4 is not set
-
-# CONFIG_PACKAGE_kmod-usb-core is not set
-
-# CONFIG_PACKAGE_luci-app-p910nd is not set
-
-EOF
-
-```
-    make defconfig
-
-- name: Download packages
-  run: |
-    cd immortalwrt
-    make download -j$(nproc)
-
-- name: Compile
-  run: |
-    cd immortalwrt
-    make -j$(nproc) || make -j1 V=s
-
-- name: Upload firmware
-  uses: actions/upload-artifact@v4
-  with:
-    name: firmware
-    path: immortalwrt/bin/targets/
+  - name: Upload
+    uses: actions/upload-artifact@v4
+    with:
+      name: firmware-nokia
+      path: immortalwrt/bin/targets/
 ```
