@@ -1,163 +1,111 @@
-name: Build ImmortalWrt EA0326GMP
+name: Build ImmortalWrt (Passwall PPP Optimized)
 
 on:
-  workflow_dispatch:
-    inputs:
-      ssh:
-        description: 'SSH debug (tmate)'
-        required: false
-        default: 'false'
-
-env:
-  REPO_URL: https://github.com/immortalwrt/immortalwrt
-  REPO_BRANCH: main
-  TZ: Asia/Shanghai
+workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-22.04
-    timeout-minutes: 360
+build:
+runs-on: ubuntu-22.04
 
-    steps:
-      - name: 初始化编译环境
-        env:
-          DEBIAN_FRONTEND: noninteractive
-        run: |
-          sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet \
-            /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          sudo docker image prune --all --force
-          sudo apt-get update
-          sudo apt-get install -y \
-            ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
-            bzip2 ccache cmake cpio curl device-tree-compiler fastjar flex gawk gettext \
-            gcc-multilib g++-multilib git gperf haveged help2man intltool libc6-dev-i386 \
-            libelf-dev libfuse-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev \
-            libmpfr-dev libncurses5-dev libncursesw5-dev libpython3-dev libreadline-dev \
-            libssl-dev libtool lrzsz mkisofs msmtp nano ninja-build p7zip p7zip-full \
-            patch pkgconf python3 python3-pyelftools python3-setuptools qemu-utils \
-            rsync scons squashfs-tools subversion swig texinfo uglifyjs upx-ucl unzip \
-            vim wget xmlto xxd zlib1g-dev
-          sudo timedatectl set-timezone "$TZ"
-          sudo mkdir -p /workdir
-          sudo chown $USER:$GROUPS /workdir
+```
+steps:
+- name: Checkout
+  uses: actions/checkout@v4
 
-      - name: 克隆源码
-        working-directory: /workdir
-        run: |
-          git clone --depth=1 -b $REPO_BRANCH $REPO_URL immortalwrt
+- name: Install dependencies
+  run: |
+    sudo apt update
+    sudo apt install -y build-essential clang flex bison g++ gawk \
+    gcc-multilib g++-multilib gettext git libncurses5-dev libssl-dev \
+    python3-distutils rsync unzip zlib1g-dev file wget curl
 
-      - name: 升级 Golang
-        working-directory: /workdir/immortalwrt
-        run: |
-          rm -rf feeds/packages/lang/golang
-          git clone --depth=1 https://github.com/sbwml/packages_lang_golang \
-            -b 23.x feeds/packages/lang/golang
+- name: Clone ImmortalWrt
+  run: |
+    git clone https://github.com/immortalwrt/immortalwrt.git
+    cd immortalwrt
+    git checkout openwrt-23.05
 
-      - name: 添加第三方 feeds
-        working-directory: /workdir/immortalwrt
-        run: |
-          echo 'src-git passwall_packages https://github.com/xiaorouji/openwrt-passwall-packages.git;main' >> feeds.conf.default
-          echo 'src-git passwall https://github.com/xiaorouji/openwrt-passwall.git;main' >> feeds.conf.default
-          echo 'src-git nikki https://github.com/nikkinikki-org/OpenWrt-nikki.git;main' >> feeds.conf.default
+- name: Add Passwall
+  run: |
+    cd immortalwrt
+    echo "src-git passwall https://github.com/xiaorouji/openwrt-passwall" >> feeds.conf.default
+    ./scripts/feeds update -a
+    ./scripts/feeds install -a
 
-      - name: 更新并安装 feeds
-        working-directory: /workdir/immortalwrt
-        run: |
-          ./scripts/feeds update -a
-          rm -rf feeds/packages/net/xray-core
-          rm -rf feeds/packages/net/xray-plugin
-          rm -rf feeds/luci/applications/luci-app-passwall
-          ./scripts/feeds install -a
+- name: Load optimized config
+  run: |
+    cd immortalwrt
+    cat <<EOF > .config
+```
 
-      - name: 写入 .config
-        working-directory: /workdir/immortalwrt
-        run: |
-          cat > .config << 'EOF'
-          CONFIG_TARGET_mediatek=y
-          CONFIG_TARGET_mediatek_filogic=y
-          CONFIG_TARGET_mediatek_filogic_DEVICE_nokia_ea0326gmp=y
+CONFIG_TARGET_mediatek=y
+CONFIG_TARGET_mediatek_filogic=y
+CONFIG_TARGET_mediatek_filogic_DEVICE_nokia_ea0326gmp=y
 
-          # 基础系统
-          CONFIG_PACKAGE_dnsmasq-full=y
-          CONFIG_PACKAGE_dnsmasq=n
-          CONFIG_PACKAGE_bash=y
-          CONFIG_PACKAGE_curl=y
-          CONFIG_PACKAGE_wget-ssl=y
-          CONFIG_PACKAGE_ca-certificates=y
-          CONFIG_PACKAGE_ip-full=y
-          CONFIG_PACKAGE_ipset=y
-          CONFIG_PACKAGE_iptables-nft=y
-          CONFIG_PACKAGE_ip6tables=y
-          CONFIG_PACKAGE_kmod-nft-tproxy=y
-          CONFIG_PACKAGE_kmod-ipt-tproxy=y
+# LuCI
 
-          # LuCI
-          CONFIG_PACKAGE_luci=y
-          CONFIG_PACKAGE_luci-base=y
-          CONFIG_PACKAGE_luci-mod-admin-full=y
-          CONFIG_PACKAGE_luci-mod-network=y
-          CONFIG_PACKAGE_luci-mod-status=y
-          CONFIG_PACKAGE_luci-mod-system=y
-          CONFIG_PACKAGE_luci-ssl-openssl=y
-          CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
+CONFIG_PACKAGE_luci=y
+CONFIG_PACKAGE_luci-ssl=y
 
-          # Passwall
-          CONFIG_PACKAGE_luci-app-passwall=y
-          CONFIG_PACKAGE_luci-i18n-passwall-zh-cn=y
-          CONFIG_PACKAGE_sing-box=y
-          CONFIG_PACKAGE_xray-core=y
-          CONFIG_PACKAGE_hysteria=y
-          CONFIG_PACKAGE_chinadns-ng=y
-          CONFIG_PACKAGE_dns2socks=y
-          CONFIG_PACKAGE_dns2tcp=y
-          CONFIG_PACKAGE_microsocks=y
-          CONFIG_PACKAGE_tcping=y
-          CONFIG_PACKAGE_ipt2socks=y
+# Passwall
 
-          # Nikki
-          CONFIG_PACKAGE_luci-app-nikki=y
-          CONFIG_PACKAGE_luci-i18n-nikki-zh-cn=y
-          CONFIG_PACKAGE_mihomo=y
+CONFIG_PACKAGE_luci-app-passwall=y
 
-          # 常用工具
-          CONFIG_PACKAGE_luci-app-firewall=y
-          CONFIG_PACKAGE_luci-i18n-firewall-zh-cn=y
-          CONFIG_PACKAGE_luci-app-ttyd=y
-          CONFIG_PACKAGE_luci-i18n-ttyd-zh-cn=y
-          CONFIG_PACKAGE_luci-app-opkg=y
-          CONFIG_PACKAGE_luci-i18n-opkg-zh-cn=y
-          EOF
+# 必要内核
 
-      - name: 生成完整配置
-        working-directory: /workdir/immortalwrt
-        run: make defconfig
+CONFIG_PACKAGE_kmod-tun=y
+CONFIG_PACKAGE_kmod-inet-diag=y
 
-      - name: SSH 调试（可选）
-        uses: mxschmitt/action-tmate@v3
-        if: github.event.inputs.ssh == 'true'
+# PPP 拨号（必须保留）
 
-      - name: 下载编译依赖
-        working-directory: /workdir/immortalwrt
-        run: |
-          make download -j8
-          find dl -size -1024c -exec rm -f {} \;
+CONFIG_PACKAGE_ppp=y
+CONFIG_PACKAGE_ppp-mod-pppoe=y
+CONFIG_PACKAGE_kmod-pppoe=y
 
-      - name: 编译固件
-        working-directory: /workdir/immortalwrt
-        run: |
-          echo -e "$(nproc) thread compile"
-          make -j$(nproc) || make -j1 V=s
+# DNS（增强版）
 
-      - name: 整理固件
-        run: |
-          mkdir -p /workdir/firmware
-          cp /workdir/immortalwrt/bin/targets/mediatek/filogic/*sysupgrade* /workdir/firmware/ 2>/dev/null || true
-          cp /workdir/immortalwrt/bin/targets/mediatek/filogic/*factory* /workdir/firmware/ 2>/dev/null || true
-          ls -lh /workdir/firmware/
+CONFIG_PACKAGE_dnsmasq-full=y
 
-      - name: 上传固件
-        uses: actions/upload-artifact@v4
-        with:
-          name: ImmortalWrt-EA0326GMP-${{ github.run_number }}
-          path: /workdir/firmware/
-          retention-days: 7
+# CONFIG_PACKAGE_dnsmasq is not set
+
+# 关闭 IPv6（省内存）
+
+# CONFIG_PACKAGE_ipv6helper is not set
+
+# 移除不需要代理
+
+# CONFIG_PACKAGE_luci-app-openclash is not set
+
+# CONFIG_PACKAGE_luci-app-nikki is not set
+
+# CONFIG_PACKAGE_luci-app-homeproxy is not set
+
+# 精简组件
+
+# CONFIG_PACKAGE_luci-app-samba4 is not set
+
+# CONFIG_PACKAGE_kmod-usb-core is not set
+
+# CONFIG_PACKAGE_luci-app-p910nd is not set
+
+EOF
+
+```
+    make defconfig
+
+- name: Download packages
+  run: |
+    cd immortalwrt
+    make download -j$(nproc)
+
+- name: Compile
+  run: |
+    cd immortalwrt
+    make -j$(nproc) || make -j1 V=s
+
+- name: Upload firmware
+  uses: actions/upload-artifact@v4
+  with:
+    name: firmware
+    path: immortalwrt/bin/targets/
+```
